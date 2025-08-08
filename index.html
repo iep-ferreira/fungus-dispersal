@@ -130,13 +130,13 @@
     // ======= Estado global =======
     const canvas = document.getElementById('grid');
     const ctx = canvas.getContext('2d');
-    let N = 100;                 // tamanho da grade (N x N)
-    let bandW = 10;              // largura das faixas
-    let S_high = 0.8, S_low = 0.3;
-    let alpha = 2.5;             // raio médio
+    let N = 200;                 // tamanho da grade (N x N)
+    let bandW = 20;              // largura das faixas
+    let S_high = 0.8, S_low = 0.05;
+    let alpha = 10;             // raio médio
     let cLoad = 500;             // carga de propágulos
     let tToInf = 10;             // passos até virar infeccioso
-    let nSeeds = 4;              // focos iniciais
+    let nSeeds = 7;              // focos iniciais
     let rng = Math.random;       // gerador
 
     let S;           // matriz de suscetibilidade (Float32Array)
@@ -144,7 +144,7 @@
     let timer;       // tempo desde infecção (Int16Array)
     let t = 0;       // tempo corrente
     let running = false;
-    let tick = 80;   // ms
+    let tick = 1000;   // ms
     let cellSize;    // tamanho do pixel no canvas
 
     // estatísticas por passo
@@ -400,3 +400,4 @@
 </body>
 
 </html>
+
