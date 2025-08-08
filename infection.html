@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulação: Dispersão em Autômato Celular</title>
+  <style>
+    :root {
+      --bg: #0f172a; /* slate-900 */
+      --panel: #111827; /* gray-900 */
+      --muted: #94a3b8; /* slate-400 */
+      --accent: #22d3ee; /* cyan-400 */
+      --good: #a8e6a3; /* suscetível (S=0.8) verde-claro */
+      --resist: #1b5e20; /* resistente (S=0.3) verde-escuro */
+      --infected: #ffd54f; /* amarelo */
+      --infectious: #ef4444; /* vermelho */
+      --grid: #1f2937; /* gray-800 */
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; }
+    body { margin: 0; background: var(--bg); color: white; }
+    header { padding: 16px 20px; border-bottom: 1px solid #1f2937; display: flex; align-items: center; gap: 14px; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+    main { display: grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; }
+    aside, section { background: var(--panel); border: 1px solid #1f2937; border-radius: 12px; }
+    aside { padding: 14px; max-height: calc(100vh - 120px); overflow: auto; }
+    fieldset { border: 1px solid #374151; border-radius: 10px; margin: 0 0 12px 0; padding: 10px; }
+    legend { color: var(--muted); padding: 0 6px; font-size: 12px; }
+    label { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+    input[type="number"], input[type="text"] { background: #0b1220; color: white; border: 1px solid #334155; border-radius: 8px; padding: 6px 8px; width: 120px; }
+    input[type="range"] { width: 100%; }
+    button { background: #0ea5e9; color: #00131a; border: none; padding: 8px 10px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #1f2937; color: #cbd5e1; border: 1px solid #334155; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .legend { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+    .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid #0b0f1a; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); }
+    canvas { background: #020617; border-radius: 12px; display: block; margin: 12px; border: 1px solid #1f2937; image-rendering: pixelated; }
+    .stats { padding: 10px 12px; border-top: 1px solid #1f2937; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .stat { font-variant-numeric: tabular-nums; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid #1f2937; font-variant-numeric: tabular-nums; font-size: 12px; }
+    th { color: var(--muted); font-weight: 600; text-align: right; }
+    .scroll { max-height: 220px; overflow: auto; border: 1px solid #1f2937; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Autômato Celular – Dispersão com Kernel Exponencial</h1>
+    <span class="muted">Grade 100×100 com faixas de 10 px (S=0.3 / 0.8)</span>
+  </header>
+
+  <main>
+    <aside>
+      <fieldset>
+        <legend>Execução</legend>
+        <div class="row">
+          <button id="btnStart">▶ Iniciar</button>
+          <button id="btnPause" class="secondary">⏸ Pausar</button>
+          <button id="btnStep" class="secondary">➟ 1 passo</button>
+          <button id="btnNSteps" class="secondary">➟ N passos</button>
+          <input type="number" id="nSteps" value="10" min="1" step="1" title="Número de passos" />
+          <button id="btnReset" class="secondary">↺ Reset</button>
+        </div>
+        <label>Passo (ms) <input type="number" id="tickMs" value="80" min="1" step="1" /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Parâmetros do Modelo</legend>
+        <label>Grid (N×N) <input type="number" id="gridN" value="100" min="10" max="300" step="10" /></label>
+        <label>Faixa (pixels) <input type="number" id="bandW" value="10" min="1" step="1" /></label>
+        <label>Suscetível alto (S<sub>H</sub>) <input type="number" id="SHigh" value="0.8" min="0" max="1" step="0.01" /></label>
+        <label>Resistente (S<sub>L</sub>) <input type="number" id="SLow" value="0.3" min="0" max="1" step="0.01" /></label>
+        <label>α (raio médio) <input type="number" id="alpha" value="2.5" min="0.1" step="0.1" /></label>
+        <label>c (carga de propágulos) <input type="number" id="cLoad" value="500" min="1" step="1" /></label>
+        <label>Tempo até infeccioso <input type="number" id="tInfectious" value="10" min="1" step="1" /></label>
+        <label>Infectados iniciais <input type="number" id="nSeeds" value="4" min="1" step="1" /></label>
+        <label>Seed RNG <input type="text" id="seed" value="auto" /></label>
+        <div class="row">
+          <button id="btnApply">Aplicar parâmetros</button>
+          <button id="btnReseed" class="secondary">Resortear focos</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Exportar</legend>
+        <div class="row">
+          <button id="btnExport">Exportar CSV</button>
+          <button id="btnSnapshot" class="secondary">Baixar PNG</button>
+        </div>
+        <p class="muted">CSV inclui: t, suscetíveis, infectados, infecciosos, novas_infecções.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Legenda</legend>
+        <div class="legend">
+          <span class="sw" style="background: var(--good);"></span> S=alto (suscetível)
+          <span class="sw" style="background: var(--resist);"></span> S=baixo (resistente)
+          <span class="sw" style="background: var(--infected);"></span> infectado
+          <span class="sw" style="background: var(--infectious);"></span> infeccioso
+        </div>
+      </fieldset>
+    </aside>
+
+    <section>
+      <canvas id="grid" width="600" height="600"></canvas>
+      <div class="stats" id="stats"></div>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left">t</th>
+              <th>Suscetíveis</th>
+              <th>Infectados</th>
+              <th>Infecciosos</th>
+              <th>Novas infecções</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ======= RNG com seed (mulberry32) =======
+    function mulberry32(a) { return function() { let t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; } }
+    function strHash(s){ let h=1779033703^s.length; for(let i=0;i<s.length;i++){ h = Math.imul(h ^ s.charCodeAt(i), 3432918353); h = h<<13 | h>>>19; } return (h>>>0); }
+
+    // ======= Estado global =======
+    const canvas = document.getElementById('grid');
+    const ctx = canvas.getContext('2d');
+    let N = 100;                 // tamanho da grade (N x N)
+    let bandW = 10;              // largura das faixas
+    let S_high = 0.8, S_low = 0.3;
+    let alpha = 2.5;             // raio médio
+    let cLoad = 500;             // carga de propágulos
+    let tToInf = 10;             // passos até virar infeccioso
+    let nSeeds = 4;              // focos iniciais
+    let rng = Math.random;       // gerador
+
+    let S;           // matriz de suscetibilidade (Float32Array)
+    let state;       // 0=saudável,1=infectado,2=infeccioso (Uint8Array)
+    let timer;       // tempo desde infecção (Int16Array)
+    let t = 0;       // tempo corrente
+    let running = false;
+    let tick = 80;   // ms
+    let cellSize;    // tamanho do pixel no canvas
+
+    // estatísticas por passo
+    const series = [];
+
+    function allocGrid(n) {
+      S = new Float32Array(n*n);
+      state = new Uint8Array(n*n);
+      timer = new Int16Array(n*n);
+    }
+
+    function idx(x,y){ return y*N + x; }
+
+    function initSusceptibility() {
+      for (let y=0; y<N; y++) {
+        const band = Math.floor(y / bandW) % 2;
+        const sVal = band === 0 ? S_high : S_low; // faixas horizontais alternadas
+        for (let x=0; x<N; x++) {
+          S[idx(x,y)] = sVal;
+        }
+      }
+    }
+
+    function clearStates() {
+      state.fill(0);
+      timer.fill(0);
+      t = 0;
+      series.length = 0;
+      updateStatsRow(0, countAll(), 0);
+      render();
+      refreshTable();
+    }
+
+    function seedInfections(k) {
+      let placed = 0; const used = new Set();
+      while (placed < k) {
+        const x = Math.floor(rng()*N);
+        const y = Math.floor(rng()*N);
+        const id = idx(x,y);
+        const key = id;
+        if (!used.has(key) && state[id] === 0) {
+          state[id] = 1; timer[id] = 0; used.add(key); placed++;
+        }
+      }
+      render();
+    }
+
+    function setSeedFromInput(v){
+      if (v && v.toLowerCase() !== 'auto') { rng = mulberry32(strHash(v)); }
+      else { rng = Math.random; }
+    }
+
+    function applyParams() {
+      const n = parseInt(document.getElementById('gridN').value,10);
+      const bw = parseInt(document.getElementById('bandW').value,10);
+      const sh = parseFloat(document.getElementById('SHigh').value);
+      const sl = parseFloat(document.getElementById('SLow').value);
+      const a  = parseFloat(document.getElementById('alpha').value);
+      const c  = parseInt(document.getElementById('cLoad').value,10);
+      const ti = parseInt(document.getElementById('tInfectious').value,10);
+      const ns = parseInt(document.getElementById('nSeeds').value,10);
+      const sd = document.getElementById('seed').value;
+      tick = parseInt(document.getElementById('tickMs').value,10);
+
+      N = n; bandW = bw; S_high = sh; S_low = sl; alpha = a; cLoad = c; tToInf = ti; nSeeds = ns;
+      setSeedFromInput(sd);
+
+      allocGrid(N);
+      initSusceptibility();
+      clearStates();
+      seedInfections(nSeeds);
+      computeCellSize();
+      render();
+    }
+
+    function computeCellSize(){
+      cellSize = Math.floor(Math.min(canvas.width, canvas.height) / N);
+      const w = cellSize * N; const h = cellSize * N;
+      // centraliza
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+    }
+
+    // kernel f(d, alpha) = 1/(2*pi*alpha^2) * exp(-d/alpha)
+    function kernel(d) {
+      return Math.exp(-d/alpha) / (2 * Math.PI * alpha * alpha);
+    }
+
+    function stepOnce() {
+      t++;
+      const newState = new Uint8Array(state); // cópia rala
+      const newTimer = new Int16Array(timer);
+
+      // lista de infecciosos atuais
+      const infectiousList = [];
+      for (let i=0; i<state.length; i++) if (state[i] === 2) infectiousList.push(i);
+
+      // 1) atualizar infectados -> infecciosos
+      for (let i=0; i<state.length; i++) {
+        if (state[i] === 1) {
+          newTimer[i] = timer[i] + 1;
+          if (newTimer[i] >= tToInf) { newState[i] = 2; }
+        }
+      }
+
+      // 2) suscetíveis podem se infectar
+      let newInfections = 0;
+      if (infectiousList.length > 0) {
+        for (let y=0; y<N; y++) {
+          for (let x=0; x<N; x++) {
+            const id = idx(x,y);
+            if (state[id] === 0) {
+              // produto sobre infecciosos: Π [1 - f(di,α)]^c
+              let prod = 1.0;
+              for (let j=0; j<infectiousList.length; j++) {
+                const k = infectiousList[j];
+                const ix = k % N, iy = (k / N) | 0;
+                const dx = ix - x, dy = iy - y;
+                const d = Math.hypot(dx, dy);
+                const f = kernel(d);
+                const term = Math.pow(1 - f, cLoad);
+                prod *= term;
+                // estabilidade numérica
+                if (prod < 1e-12) { prod = 0; break; }
+              }
+              let P = S[id] * (1 - prod);
+              if (P > 1) P = 1; if (P < 0) P = 0;
+              if (rng() < P) { newState[id] = 1; newTimer[id] = 0; newInfections++; }
+            }
+          }
+        }
+      }
+
+      state = newState; timer = newTimer;
+      const counts = countAll();
+      updateStatsRow(t, counts, newInfections);
+      render();
+    }
+
+    function countAll(){
+      let s=0,i=0,ii=0;
+      for (let k=0; k<state.length; k++) {
+        if (state[k]===0) s++; else if (state[k]===1) i++; else if (state[k]===2) ii++;
+      }
+      return {S:s, I:i, II:ii};
+    }
+
+    function render(){
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      for (let y=0; y<N; y++) {
+        for (let x=0; x<N; x++) {
+          const id = idx(x,y);
+          let fill;
+          if (state[id] === 2) fill = getComputedStyle(document.documentElement).getPropertyValue('--infectious');
+          else if (state[id] === 1) fill = getComputedStyle(document.documentElement).getPropertyValue('--infected');
+          else fill = (S[id] >= (S_high + S_low)/2) ? getComputedStyle(document.documentElement).getPropertyValue('--good') : getComputedStyle(document.documentElement).getPropertyValue('--resist');
+          ctx.fillStyle = fill;
+          ctx.fillRect(x*cellSize, y*cellSize, cellSize, cellSize);
+        }
+      }
+      // grade sutil
+      ctx.strokeStyle = '#0b1220';
+      ctx.globalAlpha = 0.15;
+      for (let x=0; x<=N; x++) { ctx.beginPath(); ctx.moveTo(x*cellSize, 0); ctx.lineTo(x*cellSize, N*cellSize); ctx.stroke(); }
+      for (let y=0; y<=N; y++) { ctx.beginPath(); ctx.moveTo(0, y*cellSize); ctx.lineTo(N*cellSize, y*cellSize); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+
+    function updateStatsRow(time, counts, newInf){
+      const total = N*N;
+      const sPct = ((counts.S/total)*100).toFixed(1);
+      const iPct = ((counts.I/total)*100).toFixed(1);
+      const iiPct = ((counts.II/total)*100).toFixed(1);
+      document.getElementById('stats').innerHTML = `
+        <div class="stat">t = <b>${time}</b></div>
+        <div class="stat">Suscetíveis: <b>${counts.S}</b> (${sPct}%)</div>
+        <div class="stat">Infectados: <b>${counts.I}</b> (${iPct}%)</div>
+        <div class="stat">Infecciosos: <b>${counts.II}</b> (${iiPct}%)</div>
+      `;
+      series.push({t: time, S: counts.S, I: counts.I, II: counts.II, new: newInf});
+      appendRow(time, counts, newInf);
+    }
+
+    function appendRow(time, counts, newInf){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="text-align:left">${time}</td>
+        <td>${counts.S}</td>
+        <td>${counts.I}</td>
+        <td>${counts.II}</td>
+        <td>${newInf}</td>
+      `;
+      document.getElementById('tbody').appendChild(tr);
+    }
+
+    function refreshTable(){
+      const tb = document.getElementById('tbody');
+      tb.innerHTML = '';
+      for (const row of series) {
+        appendRow(row.t, {S:row.S,I:row.I,II:row.II}, row.new);
+      }
+    }
+
+    // ======= Loop de animação =======
+    let rafId = null; let lastTick = 0; 
+    function loop(timestamp){
+      if (!running) return;
+      if (timestamp - lastTick >= tick) {
+        lastTick = timestamp;
+        stepOnce();
+      }
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // ======= Exportação =======
+    function exportCSV(){
+      const header = 't,Suscetiveis,Infectados,Infecciosos,Novas_infeccoes\n';
+      const lines = series.map(r => `${r.t},${r.S},${r.I},${r.II},${r.new}`).join('\n');
+      const blob = new Blob([header + lines], {type: 'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'series_dispersao.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadPNG(){
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `snapshot_t${t}.png`;
+      a.click();
+    }
+
+    // ======= Controles =======
+    document.getElementById('btnStart').onclick = () => { if (!running) { running = true; lastTick = 0; requestAnimationFrame(loop); } };
+    document.getElementById('btnPause').onclick = () => { running = false; if (rafId) cancelAnimationFrame(rafId); };
+    document.getElementById('btnStep').onclick  = () => { if (!running) stepOnce(); };
+    document.getElementById('btnNSteps').onclick = () => { if (running) return; const n = parseInt(document.getElementById('nSteps').value,10) || 1; for (let k=0;k<n;k++) stepOnce(); };
+    document.getElementById('btnReset').onclick = () => { running=false; if (rafId) cancelAnimationFrame(rafId); applyParams(); };
+    document.getElementById('btnApply').onclick = () => { running=false; if (rafId) cancelAnimationFrame(rafId); applyParams(); };
+    document.getElementById('btnReseed').onclick = () => { running=false; if (rafId) cancelAnimationFrame(rafId); clearStates(); seedInfections(nSeeds); };
+    document.getElementById('btnExport').onclick = exportCSV;
+    document.getElementById('btnSnapshot').onclick = downloadPNG;
+
+    // ======= Inicialização =======
+    window.addEventListener('load', () => {
+      computeCellSize();
+      applyParams();
+    });
+
+    // Responsivo simples
+    window.addEventListener('resize', computeCellSize);
+  </script>
+</body>
+</html>
