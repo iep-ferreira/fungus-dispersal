@@ -21,7 +21,7 @@ The full article is available in *Ecological Informatics*:
 ## 💾 From C to HTML/JS
 
 The original implementation was written in **C** — and, sadly, has likely been lost to time.  
-However, the algorithm itself was simple and elegant.  
+However, the algorithm itself was simple.  
 This repository is an attempt to **rebuild it** in **HTML/JavaScript**.
 
 The entire implementation was generated in a **single iteration** using the recently released **GPT-5** model — and it works! 🚀
